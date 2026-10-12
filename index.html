@@ -1,0 +1,77 @@
+import math
+import struct
+import sys
+import time
+import winsound
+
+# Фазы: (название, длительность мс, частота начала Гц, частота конца Гц, описание)
+PHASES = [
+    ("1. Голограмма понятий",    1982, 220, 330, "Удерживайте условия задачи. Решений пока не ищите."),
+    ("2. Разгон абстракций",      637, 440, 880, "Придумывайте любые идеи, даже абсурдные."),
+    ("3. Фазовая калибровка",     431,   0,   0, "Пауза. Где в идее логическая ошибка?"),
+    ("4. Заземление",             416, 150, 150, "Смотрите на сухие факты задачи."),
+    ("5. Осмысление",            3479, 432, 432, "Соедините факты и идеи. Запишите ход мысли."),
+    ("6. Инсайт",                 325, 2000, 2000, "Зафиксируйте ключевой вывод."),
+]
+
+SAMPLE_RATE = 44100
+VOLUME = 0.4  # амплитуда 0..1
+
+
+def make_wav_bytes(freq_start, freq_end, duration_ms):
+    """Возвращает WAV в памяти; частота плавно меняется от freq_start к freq_end."""
+    n = int(SAMPLE_RATE * duration_ms / 1000)
+    data = bytearray()
+    phase = 0.0
+    for i in range(n):
+        t = i / n
+        freq = freq_start + (freq_end - freq_start) * t
+        phase += 2 * math.pi * freq / SAMPLE_RATE
+        data += struct.pack("<h", int(VOLUME * 32767 * math.sin(phase)))
+    header = (
+        b"RIFF" + struct.pack("<I", 36 + len(data)) + b"WAVE"
+        + b"fmt " + struct.pack("<IHHIIHH", 16, 1, 1, SAMPLE_RATE, SAMPLE_RATE * 2, 2, 16)
+        + b"data" + struct.pack("<I", len(data))
+    )
+    return header + bytes(data)
+
+
+def play_phase(freq_start, freq_end, duration_ms):
+    """Проигрывает фазу; если частота 0 — тишина."""
+    if freq_start <= 0:
+        time.sleep(duration_ms / 1000)
+        return
+    winsound.PlaySound(make_wav_bytes(freq_start, freq_end, duration_ms),
+                       winsound.SND_MEMORY)
+
+
+def run():
+    print("=" * 60)
+    print("  КОГНИТИВНЫЙ МЕТРОНОМ (Windows)")
+    print("  Ctrl+C — выход.")
+    print("=" * 60)
+    time.sleep(2)
+
+    cycle = 1
+    try:
+        while True:
+            print(f"\n--- Цикл {cycle} ---")
+            # Абсолютный отсчёт: фазы стартуют по расписанию, дрейф не копится
+            schedule_start = time.perf_counter()
+            planned = 0.0
+            for name, dur, f0, f1, desc in PHASES:
+                print(f"[{name}] {dur} мс — {desc}")
+                play_phase(f0, f1, dur)
+                planned += dur / 1000
+                delay = (schedule_start + planned) - time.perf_counter()
+                if delay > 0:
+                    time.sleep(delay)
+            cycle += 1
+    except KeyboardInterrupt:
+        print("\nМетроном остановлен.")
+
+
+if __name__ == "__main__":
+    if sys.platform != "win32":
+        sys.exit("Этот вариант предназначен для Windows.")
+    run()
